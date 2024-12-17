@@ -1,3 +1,5 @@
+#!/usr/bin/env ts-node
+
 import * as fs from 'fs';
 import * as path from 'path';
 import * as process from 'process';
@@ -5,34 +7,32 @@ import ignore from 'ignore';
 import { Writable } from 'stream';
 
 interface Options {
-  directory: string;
+  directories: string[];
   output?: string;
 }
 
 function parseArgs(): Options {
   const args = process.argv.slice(2);
-  let directory = '';
+  const directories: string[] = [];
   let output: string | undefined = undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '-o' || arg === '--output') {
-      output = args[i+1];
+      output = args[i + 1];
       i++;
     } else {
-      // 最初の非オプション引数をディレクトリとみなす
-      if (!directory) {
-        directory = arg;
-      }
+      // 出力指定以外はディレクトリとみなす
+      directories.push(arg);
     }
   }
 
-  if (!directory) {
-    console.error('Usage: concat_code <directory> [-o output]');
+  if (directories.length === 0) {
+    console.error('Usage: concat_code <directory1> <directory2> ... [-o output]');
     process.exit(1);
   }
 
-  return { directory, output };
+  return { directories, output };
 }
 
 function gatherFiles(dir: string): string[] {
@@ -49,36 +49,41 @@ function gatherFiles(dir: string): string[] {
   return fileList;
 }
 
-function main() {
-  const { directory, output } = parseArgs();
+function getFilteredFiles(directory: string, ig: ReturnType<typeof ignore>): string[] {
   const absDir = path.resolve(directory);
-  process.chdir(absDir);
+  const allFiles = gatherFiles(absDir);
+  const relFiles = allFiles.map(f => path.relative(absDir, f));
+  const filtered = relFiles.filter(f => !ig.ignores(f));
+  return filtered;
+}
 
-  // .gitignore の読み込みと ignore インスタンス作成
-  const gitignorePath = path.join(absDir, '.gitignore');
-  let ig = ignore();
-  if (fs.existsSync(gitignorePath)) {
-    const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
-    ig = ignore().add(gitignoreContent);
-  }
+function main() {
+  const { directories, output } = parseArgs();
 
-  const files = gatherFiles('.').filter(f => {
-    // ignoreパターンは相対パスで評価する
-    return !ig.ignores(f); 
-  });
-
-  // outStream を Writable として扱う
   let outStream: Writable = process.stdout;
   if (output) {
     outStream = fs.createWriteStream(output, { encoding: 'utf-8' });
   }
 
-  for (const f of files) {
-    const code = fs.readFileSync(f, { encoding: 'utf-8' });
-    outStream.write(`## ${f}\n`);
-    outStream.write("```\n");
-    outStream.write(code);
-    outStream.write("\n```\n\n");
+  for (const dir of directories) {
+    const absDir = path.resolve(dir);
+    const gitignorePath = path.join(absDir, '.gitignore');
+    let ig = ignore();
+    if (fs.existsSync(gitignorePath)) {
+      const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
+      ig = ignore().add(gitignoreContent);
+    }
+
+    const filteredFiles = getFilteredFiles(dir, ig);
+
+    for (const f of filteredFiles) {
+      const fullPath = path.join(absDir, f);
+      const code = fs.readFileSync(fullPath, { encoding: 'utf-8' });
+      outStream.write(`## ${dir}/${f}\n`);
+      outStream.write("```\n");
+      outStream.write(code);
+      outStream.write("\n```\n\n");
+    }
   }
 
   if (outStream !== process.stdout && (outStream as fs.WriteStream).end) {
