@@ -1,0 +1,30 @@
+# Node modules
+node_modules/
+
+# Output directories (TypeScriptや他のビルドツールで生成される成果物)
+dist/
+build/
+out/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# OS generated files
+.DS_Store
+
+# 環境変数ファイル
+.env
+.env.*
+
+# エディタやIDE特有の設定ファイル/ディレクトリ
+.vscode/
+.idea/
+
+# 一時的な成果物ファイル例
+all_code.md
