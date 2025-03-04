@@ -62,7 +62,9 @@ function main() {
 
   let outStream: Writable = process.stdout;
   if (output) {
-    outStream = fs.createWriteStream(output, { encoding: 'utf-8' });
+    // BOMを追加してUTF-8で書き込むように設定
+    outStream = fs.createWriteStream(output, { encoding: 'utf8', flags: 'w' });
+    (outStream as fs.WriteStream).write('\ufeff');
   }
 
   for (const dir of directories) {
@@ -78,11 +80,18 @@ function main() {
 
     for (const f of filteredFiles) {
       const fullPath = path.join(absDir, f);
-      const code = fs.readFileSync(fullPath, { encoding: 'utf-8' });
-      outStream.write(`## ${dir}/${f}\n`);
-      outStream.write("```\n");
-      outStream.write(code);
-      outStream.write("\n```\n\n");
+      // ファイルの拡張子を取得
+      const ext = path.extname(fullPath).toLowerCase();
+      // テキストファイルの場合はUTF-8で読み込む
+      const isText = ['.txt', '.md', '.js', '.ts', '.json', '.yml', '.yaml', '.html', '.css'].includes(ext);
+      
+      if (isText) {
+        const code = fs.readFileSync(fullPath, { encoding: 'utf-8' });
+        outStream.write(`## ${dir}/${f}\n`);
+        outStream.write("```\n");
+        outStream.write(code);
+        outStream.write("\n```\n\n");
+      }
     }
   }
 
